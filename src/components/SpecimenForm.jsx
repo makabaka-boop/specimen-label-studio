@@ -1,22 +1,33 @@
-import { useState } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { findTemplate } from '../utils';
 
-const fieldLabels = {
-  specimenNo: '标本编号',
-  latinName: '拉丁名',
-  collector: '采集人',
-  collectionDate: '采集日期',
-  longitude: '经度',
-  latitude: '纬度',
-  altitude: '海拔',
-  habitat: '生境备注'
-};
-
-export default function SpecimenForm({ specimen, onSave, onCancel }) {
+export default function SpecimenForm({ specimen, templates, onSave, onCancel }) {
   const [formData, setFormData] = useState(specimen);
+
+  // 切换模板时，重新构造表单字段，保留同名字段值
+  useEffect(() => {
+    setFormData(specimen);
+  }, [specimen]);
+
+  const template = useMemo(
+    () => findTemplate(templates, formData.templateId),
+    [templates, formData.templateId]
+  );
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleTemplateChange = (e) => {
+    const newTemplateId = e.target.value;
+    const newTemplate = findTemplate(templates, newTemplateId);
+    // 仅保留新模板包含的字段值
+    const next = { id: formData.id, templateId: newTemplateId };
+    newTemplate.fields.forEach(f => {
+      next[f.key] = formData[f.key] ?? '';
+    });
+    setFormData(next);
   };
 
   const handleSubmit = (e) => {
@@ -26,24 +37,37 @@ export default function SpecimenForm({ specimen, onSave, onCancel }) {
 
   return (
     <form onSubmit={handleSubmit} className="specimen-form">
+      <div className="form-template-row">
+        <label htmlFor="templateId">所属模板</label>
+        <select
+          id="templateId"
+          value={formData.templateId || ''}
+          onChange={handleTemplateChange}
+        >
+          {templates.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="form-grid">
-        {Object.entries(fieldLabels).map(([field, label]) => (
-          <div key={field} className="form-group">
-            <label htmlFor={field}>{label}</label>
-            {field === 'habitat' ? (
+        {template.fields.map((field) => (
+          <div key={field.key} className="form-group">
+            <label htmlFor={field.key}>{field.label}</label>
+            {field.type === 'textarea' ? (
               <textarea
-                id={field}
-                name={field}
-                value={formData[field] || ''}
+                id={field.key}
+                name={field.key}
+                value={formData[field.key] || ''}
                 onChange={handleChange}
                 rows={3}
               />
             ) : (
               <input
-                type={field === 'collectionDate' ? 'date' : 'text'}
-                id={field}
-                name={field}
-                value={formData[field] || ''}
+                type={field.type === 'date' ? 'date' : (field.type === 'number' ? 'number' : 'text')}
+                id={field.key}
+                name={field.key}
+                value={formData[field.key] || ''}
                 onChange={handleChange}
               />
             )}

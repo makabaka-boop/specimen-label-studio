@@ -1,15 +1,17 @@
 import { useState } from 'react';
 import SpecimenLabel from './SpecimenLabel';
 
-export default function LabelGrid({ specimens, settings }) {
+export default function LabelGrid({ specimens, template }) {
   const [currentPage, setCurrentPage] = useState(0);
-  const { columns, rows } = settings;
+  const layout = template.layout;
+  const { columns, rows, labelWidth, labelHeight } = layout;
   const perPage = columns * rows;
   const totalPages = Math.max(1, Math.ceil(specimens.length / perPage));
 
+  const safePage = Math.min(currentPage, totalPages - 1);
   const currentSpecimens = specimens.slice(
-    currentPage * perPage,
-    (currentPage + 1) * perPage
+    safePage * perPage,
+    (safePage + 1) * perPage
   );
 
   const gridStyle = {
@@ -25,15 +27,15 @@ export default function LabelGrid({ specimens, settings }) {
       <div className="page-controls">
         <button
           onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
-          disabled={currentPage === 0}
+          disabled={safePage === 0}
           className="btn btn-small"
         >
           上一页
         </button>
-        <span>第 {currentPage + 1} / {totalPages} 页</span>
+        <span>第 {safePage + 1} / {totalPages} 页</span>
         <button
           onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
-          disabled={currentPage === totalPages - 1}
+          disabled={safePage >= totalPages - 1}
           className="btn btn-small"
         >
           下一页
@@ -45,7 +47,7 @@ export default function LabelGrid({ specimens, settings }) {
           <SpecimenLabel
             key={specimen.id || index}
             specimen={specimen}
-            settings={settings}
+            template={template}
           />
         ))}
         {currentSpecimens.length < perPage &&
@@ -54,8 +56,8 @@ export default function LabelGrid({ specimens, settings }) {
               key={`empty-${i}`}
               className="empty-label"
               style={{
-                width: `${settings.labelWidth}mm`,
-                height: `${settings.labelHeight}mm`,
+                width: `${labelWidth}mm`,
+                height: `${labelHeight}mm`,
                 border: '1px dashed #ddd',
                 backgroundColor: '#fafafa'
               }}
