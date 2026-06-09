@@ -1,49 +1,106 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import SpecimenForm from './components/SpecimenForm';
 import SpecimenList from './components/SpecimenList';
 import CSVImport from './components/CSVImport';
-import SettingsPanel from './components/SettingsPanel';
+import TemplateManager from './components/TemplateManager';
 import LabelGrid from './components/LabelGrid';
 import {
-  defaultSpecimen,
-  defaultSettings,
   generateId,
   saveToLocalStorage,
   loadFromLocalStorage,
+  migrateDraft,
   exportToJSON,
-  downloadFile
+  downloadFile,
+  findTemplate,
+  buildSpecimenFromTemplate,
+  createTemplate,
+  reassignSpecimens,
+  builtinTemplates,
+  defaultActiveTemplateId
 } from './utils';
 import html2canvas from 'html2canvas';
 import './App.css';
 
 function App() {
   const [specimens, setSpecimens] = useState([]);
-  const [settings, setSettings] = useState(defaultSettings);
+  const [templates, setTemplates] = useState(() => JSON.parse(JSON.stringify(builtinTemplates)));
+  const [activeTemplateId, setActiveTemplateId] = useState(defaultActiveTemplateId);
   const [activeTab, setActiveTab] = useState('data');
   const [showForm, setShowForm] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [editingSpecimen, setEditingSpecimen] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
+  const [hydrated, setHydrated] = useState(false);
 
+  // 初始化：加载并迁移本地数据
   useEffect(() => {
     const draft = loadFromLocalStorage();
-    if (draft) {
-      setSpecimens(draft.data || []);
-      setSettings(draft.settings || defaultSettings);
-      setLastSaved(draft.savedAt);
-    }
+    const migrated = migrateDraft(draft);
+    setSpecimens(migrated.specimens);
+    setTemplates(migrated.templates);
+    setActiveTemplateId(migrated.activeTemplateId);
+    if (draft?.savedAt) setLastSaved(draft.savedAt);
+    setHydrated(true);
   }, []);
 
+  // 自动持久化
   useEffect(() => {
+    if (!hydrated) return;
     const timer = setTimeout(() => {
-      saveToLocalStorage(specimens, settings);
+      saveToLocalStorage({ specimens, templates, activeTemplateId });
       setLastSaved(new Date().toISOString());
-    }, 1000);
+    }, 800);
     return () => clearTimeout(timer);
-  }, [specimens, settings]);
+  }, [specimens, templates, activeTemplateId, hydrated]);
 
+  const activeTemplate = useMemo(
+    () => findTemplate(templates, activeTemplateId),
+    [templates, activeTemplateId]
+  );
+
+  // ====== 模板操作 ======
+  const handleAddTemplate = () => {
+    const tpl = createTemplate(`自定义模板${templates.length + 1}`);
+    setTemplates(prev => [...prev, tpl]);
+    setActiveTemplateId(tpl.id);
+  };
+
+  const handleUpdateTemplate = (updated) => {
+    setTemplates(prev => prev.map(t => (t.id === updated.id ? updated : t)));
+  };
+
+  const handleDeleteTemplate = (id) => {
+    if (templates.length <= 1) {
+      alert('至少需要保留一个模板');
+      return;
+    }
+    const target = templates.find(t => t.id === id);
+    if (target?.builtin) {
+      if (!confirm('这是内置模板，删除后将无法恢复，确定继续吗？')) return;
+    } else if (!confirm('确定要删除该模板吗？已有标本将被迁移到默认模板。')) {
+      return;
+    }
+    const remaining = templates.filter(t => t.id !== id);
+    const fallbackId = remaining[0].id;
+    setTemplates(remaining);
+    setSpecimens(prev => reassignSpecimens(prev, id, fallbackId));
+    if (activeTemplateId === id) setActiveTemplateId(fallbackId);
+  };
+
+  const handleDuplicateTemplate = (id) => {
+    const tpl = templates.find(t => t.id === id);
+    if (!tpl) return;
+    const copy = JSON.parse(JSON.stringify(tpl));
+    copy.id = generateId();
+    copy.name = `${tpl.name} 副本`;
+    copy.builtin = false;
+    setTemplates(prev => [...prev, copy]);
+    setActiveTemplateId(copy.id);
+  };
+
+  // ====== 标本操作 ======
   const handleAddSpecimen = () => {
-    setEditingSpecimen({ ...defaultSpecimen, id: generateId() });
+    setEditingSpecimen(buildSpecimenFromTemplate(activeTemplate));
     setShowForm(true);
   };
 
@@ -54,7 +111,7 @@ function App() {
 
   const handleSaveSpecimen = (specimen) => {
     if (specimens.find(s => s.id === specimen.id)) {
-      setSpecimens(prev => prev.map(s => s.id === specimen.id ? specimen : s));
+      setSpecimens(prev => prev.map(s => (s.id === specimen.id ? specimen : s)));
     } else {
       setSpecimens(prev => [...prev, specimen]);
     }
@@ -73,37 +130,35 @@ function App() {
     setShowCSVImport(false);
   };
 
+  // ====== 导出/打印 ======
   const handleExportPNG = async () => {
     const grid = document.getElementById('printable-grid');
     if (!grid) return;
-
     try {
-      const canvas = await html2canvas(grid, {
-        scale: 2,
-        useCORS: true
-      });
-      canvas.toBlob((blob) => {
-        downloadFile(blob, 'specimen-labels.png');
-      });
+      const canvas = await html2canvas(grid, { scale: 2, useCORS: true });
+      canvas.toBlob((blob) => downloadFile(blob, 'specimen-labels.png'));
     } catch (error) {
       alert('导出PNG失败: ' + error.message);
     }
   };
 
   const handleExportPDF = () => {
+    const layout = activeTemplate.layout;
     const info = `
 标本标签PDF导出说明
 
-当前设置:
-- 标签尺寸: ${settings.labelWidth} x ${settings.labelHeight} mm
-- 边距: ${settings.margin} mm
-- 字体大小: ${settings.fontSize} pt
-- 每页布局: ${settings.columns}列 x ${settings.rows}行
-- 显示二维码: ${settings.showQR ? '是' : '否'}
+当前模板: ${activeTemplate.name}
+标签标题: ${activeTemplate.title}
+
+布局参数:
+- 标签尺寸: ${layout.labelWidth} x ${layout.labelHeight} mm
+- 边距: ${layout.margin} mm
+- 字体大小: ${layout.fontSize} pt
+- 每页布局: ${layout.columns}列 x ${layout.rows}行
+- 显示二维码: ${layout.showQR ? '是' : '否'}
 
 数据统计:
-- 标本数量: ${specimens.length}
-- 总页数: ${Math.ceil(specimens.length / (settings.columns * settings.rows))}
+- 当前模板标本数量: ${specimens.filter(s => s.templateId === activeTemplate.id).length}
 
 打印说明:
 1. 使用浏览器打印功能 (Ctrl+P / Cmd+P)
@@ -117,20 +172,35 @@ function App() {
   };
 
   const handleClearAll = () => {
-    if (confirm('确定要清空所有数据吗？此操作不可撤销。')) {
+    if (confirm('确定要清空所有标本数据吗？此操作不可撤销。')) {
       setSpecimens([]);
     }
   };
 
-  const handlePrint = () => {
-    window.print();
-  };
+  const handlePrint = () => window.print();
+
+  // 当前预览只展示活动模板的标本
+  const previewSpecimens = useMemo(
+    () => specimens.filter(s => s.templateId === activeTemplate.id),
+    [specimens, activeTemplate]
+  );
 
   return (
     <div className="app">
       <header className="app-header">
         <h1>标本标签排版工具</h1>
         <div className="header-actions">
+          <div className="template-switcher">
+            <label>当前模板</label>
+            <select
+              value={activeTemplateId}
+              onChange={(e) => setActiveTemplateId(e.target.value)}
+            >
+              {templates.map(t => (
+                <option key={t.id} value={t.id}>{t.name}</option>
+              ))}
+            </select>
+          </div>
           {lastSaved && (
             <span className="save-status">
               已保存: {new Date(lastSaved).toLocaleTimeString()}
@@ -156,10 +226,10 @@ function App() {
           标签预览
         </button>
         <button
-          className={`tab ${activeTab === 'settings' ? 'active' : ''}`}
-          onClick={() => setActiveTab('settings')}
+          className={`tab ${activeTab === 'templates' ? 'active' : ''}`}
+          onClick={() => setActiveTab('templates')}
         >
-          排版设置
+          模板管理
         </button>
         <button
           className={`tab ${activeTab === 'export' ? 'active' : ''}`}
@@ -174,7 +244,7 @@ function App() {
           <div className="tab-content">
             <div className="action-bar">
               <button onClick={handleAddSpecimen} className="btn btn-primary">
-                + 添加标本
+                + 添加标本（{activeTemplate.name}）
               </button>
               <button onClick={() => setShowCSVImport(true)} className="btn btn-secondary">
                 导入CSV
@@ -185,6 +255,7 @@ function App() {
             </div>
             <SpecimenList
               specimens={specimens}
+              templates={templates}
               onEdit={handleEditSpecimen}
               onDelete={handleDeleteSpecimen}
             />
@@ -193,13 +264,30 @@ function App() {
 
         {activeTab === 'preview' && (
           <div className="tab-content">
-            <LabelGrid specimens={specimens} settings={settings} />
+            <div className="preview-header">
+              <p>
+                正在预览模板 <strong>{activeTemplate.name}</strong>，
+                共 {previewSpecimens.length} 条标本
+              </p>
+            </div>
+            <LabelGrid
+              specimens={previewSpecimens}
+              template={activeTemplate}
+            />
           </div>
         )}
 
-        {activeTab === 'settings' && (
+        {activeTab === 'templates' && (
           <div className="tab-content">
-            <SettingsPanel settings={settings} onSettingsChange={setSettings} />
+            <TemplateManager
+              templates={templates}
+              activeTemplateId={activeTemplateId}
+              onSelect={setActiveTemplateId}
+              onAdd={handleAddTemplate}
+              onUpdate={handleUpdateTemplate}
+              onDelete={handleDeleteTemplate}
+              onDuplicate={handleDuplicateTemplate}
+            />
           </div>
         )}
 
@@ -210,14 +298,17 @@ function App() {
               <div className="export-grid">
                 <div className="export-card">
                   <h4>导出 JSON</h4>
-                  <p>保存所有数据和设置为JSON格式，便于后续导入编辑</p>
-                  <button onClick={() => exportToJSON(specimens, settings)} className="btn btn-primary">
+                  <p>保存所有标本数据、模板及活动模板设置为JSON，便于后续导入编辑</p>
+                  <button
+                    onClick={() => exportToJSON(specimens, templates, activeTemplateId)}
+                    className="btn btn-primary"
+                  >
                     导出 JSON
                   </button>
                 </div>
                 <div className="export-card">
                   <h4>导出 PNG</h4>
-                  <p>将当前预览页面导出为高清PNG图片</p>
+                  <p>将当前模板预览页面导出为高清PNG图片</p>
                   <button onClick={handleExportPNG} className="btn btn-primary">
                     导出 PNG
                   </button>
@@ -238,17 +329,18 @@ function App() {
         )}
       </main>
 
-      {showForm && (
+      {showForm && editingSpecimen && (
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
-              <h3>{editingSpecimen?.specimenNo ? '编辑标本' : '添加标本'}</h3>
+              <h3>{specimens.find(s => s.id === editingSpecimen.id) ? '编辑标本' : '添加标本'}</h3>
               <button onClick={() => setShowForm(false)} className="close-btn">
                 &times;
               </button>
             </div>
             <SpecimenForm
               specimen={editingSpecimen}
+              templates={templates}
               onSave={handleSaveSpecimen}
               onCancel={() => setShowForm(false)}
             />
@@ -260,6 +352,8 @@ function App() {
         <div className="modal-overlay">
           <div className="modal">
             <CSVImport
+              templates={templates}
+              defaultTemplateId={activeTemplateId}
               onImport={handleCSVImport}
               onClose={() => setShowCSVImport(false)}
             />

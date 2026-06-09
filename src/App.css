@@ -357,13 +357,254 @@ body {
   word-break: break-all;
 }
 
-.latin-name {
-  font-size: 0.9em;
+.label-title {
+  font-size: 0.85em;
+  font-weight: 600;
+  text-align: center;
+  border-bottom: 1px solid #ddd;
+  padding-bottom: 1mm;
+  margin-bottom: 1mm;
+  color: #333;
 }
 
-.habitat {
-  font-size: 0.85em;
+.label-field-bold {
+  font-weight: 600;
+}
+
+.label-field-italic {
+  font-style: italic;
+}
+
+.label-field-muted {
   color: #666;
+  font-size: 0.85em;
+}
+
+/* ====== 模板切换器 ====== */
+.template-switcher {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.template-switcher label {
+  opacity: 0.9;
+}
+
+.template-switcher select {
+  padding: 0.375rem 0.625rem;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  font-size: 0.875rem;
+}
+
+.template-switcher select option {
+  color: #1f2937;
+}
+
+/* ====== 模板管理页 ====== */
+.template-manager {
+  display: grid;
+  grid-template-columns: 260px 1fr;
+  gap: 1.5rem;
+}
+
+.template-list-pane {
+  border-right: 1px solid #e5e7eb;
+  padding-right: 1.25rem;
+}
+
+.template-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.template-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.template-list-item {
+  padding: 0.75rem;
+  border-radius: 8px;
+  background: #f9fafb;
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid transparent;
+}
+
+.template-list-item:hover {
+  background: #f3f4f6;
+}
+
+.template-list-item.active {
+  background: #eef2ff;
+  border-color: #667eea;
+}
+
+.template-list-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.template-list-info .badge {
+  font-size: 0.7rem;
+  padding: 0.1rem 0.5rem;
+  border-radius: 10px;
+  background: #e0e7ff;
+  color: #4f46e5;
+}
+
+.template-list-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.template-edit-pane {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.template-section {
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 1rem 1.25rem;
+}
+
+.template-section h4 {
+  margin-bottom: 0.75rem;
+  color: #1f2937;
+}
+
+.template-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.template-section .setting-item input[type="text"],
+.template-section .setting-item input[type="number"] {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+.field-config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.field-config-row {
+  display: grid;
+  grid-template-columns: 70px 1.2fr 1.2fr 1fr 1.4fr 1fr 60px 70px;
+  gap: 0.5rem;
+  align-items: center;
+  padding: 0.5rem;
+  border-radius: 6px;
+  background: #f9fafb;
+  font-size: 0.8125rem;
+}
+
+.field-config-row.field-config-head {
+  background: #eef2ff;
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+.field-config-row input[type="text"],
+.field-config-row select {
+  padding: 0.375rem 0.5rem;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  width: 100%;
+}
+
+.field-order {
+  display: flex;
+  gap: 0.25rem;
+}
+
+/* 表单中的模板选择行 */
+.form-template-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0;
+  margin-bottom: 1rem;
+  border-bottom: 1px dashed #e5e7eb;
+}
+
+.form-template-row label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.form-template-row select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  min-width: 200px;
+}
+
+/* CSV 导入中的模板选择 */
+.csv-template-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0 1.5rem 1rem;
+  border-bottom: 1px dashed #e5e7eb;
+  margin-bottom: 1rem;
+}
+
+.csv-template-row label {
+  font-weight: 500;
+  color: #374151;
+  font-size: 0.875rem;
+}
+
+.csv-template-row select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+}
+
+/* 列表项模板标签 */
+.item-template {
+  background: #eef2ff;
+  color: #4f46e5;
+  padding: 0.15rem 0.5rem;
+  border-radius: 10px;
+  font-size: 0.75rem;
+  min-width: 90px;
+  text-align: center;
+}
+
+.preview-row.preview-head {
+  background: #eef2ff;
+  color: #4f46e5;
+  font-weight: 500;
+}
+
+.preview-header {
+  margin-bottom: 1rem;
+  color: #6b7280;
+  font-size: 0.875rem;
 }
 
 .export-options h3 {
@@ -579,5 +820,21 @@ body {
 
   .specimen-form {
     padding: 1rem;
+  }
+
+  .template-manager {
+    grid-template-columns: 1fr;
+  }
+
+  .template-list-pane {
+    border-right: none;
+    border-bottom: 1px solid #e5e7eb;
+    padding-right: 0;
+    padding-bottom: 1rem;
+  }
+
+  .field-config-row {
+    grid-template-columns: 1fr;
+    gap: 0.375rem;
   }
 }

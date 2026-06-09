@@ -1,7 +1,14 @@
 import { QRCodeSVG } from 'qrcode.react';
 
-export default function SpecimenLabel({ specimen, settings }) {
-  const { labelWidth, labelHeight, margin, fontSize, showQR, qrSize } = settings;
+const styleClassMap = {
+  bold: 'label-field-bold',
+  italic: 'label-field-italic',
+  muted: 'label-field-muted'
+};
+
+export default function SpecimenLabel({ specimen, template }) {
+  const layout = template.layout;
+  const { labelWidth, labelHeight, margin, fontSize, showQR, qrSize } = layout;
   const qrPixelSize = qrSize * 3.78;
 
   const labelStyle = {
@@ -12,7 +19,7 @@ export default function SpecimenLabel({ specimen, settings }) {
     border: '1px solid #ccc',
     display: 'flex',
     flexDirection: 'column',
-    gap: '2mm',
+    gap: '1mm',
     boxSizing: 'border-box',
     backgroundColor: 'white'
   };
@@ -24,45 +31,24 @@ export default function SpecimenLabel({ specimen, settings }) {
   };
 
   const qrContent = specimen.specimenNo || specimen.id || '';
+  const visibleFields = template.fields.filter(f => f.visible !== false);
 
   return (
     <div className="specimen-label" style={labelStyle}>
+      {template.title && (
+        <div className="label-title">{template.title}</div>
+      )}
       <div className="label-content" style={labelContentStyle}>
-        {specimen.specimenNo && (
-          <div className="label-field">
-            <strong>{specimen.specimenNo}</strong>
-          </div>
-        )}
-        {specimen.latinName && (
-          <div className="label-field latin-name">
-            <em>{specimen.latinName}</em>
-          </div>
-        )}
-        {specimen.collector && (
-          <div className="label-field">
-            采集人: {specimen.collector}
-          </div>
-        )}
-        {specimen.collectionDate && (
-          <div className="label-field">
-            日期: {specimen.collectionDate}
-          </div>
-        )}
-        {(specimen.latitude || specimen.longitude) && (
-          <div className="label-field">
-            坐标: {specimen.latitude || ''}, {specimen.longitude || ''}
-          </div>
-        )}
-        {specimen.altitude && (
-          <div className="label-field">
-            海拔: {specimen.altitude}m
-          </div>
-        )}
-        {specimen.habitat && (
-          <div className="label-field habitat">
-            {specimen.habitat}
-          </div>
-        )}
+        {visibleFields.map((field) => {
+          const raw = specimen[field.key];
+          if (raw === undefined || raw === null || raw === '') return null;
+          const cls = ['label-field', styleClassMap[field.style] || ''].join(' ').trim();
+          return (
+            <div key={field.key} className={cls}>
+              {field.prefix || ''}{raw}
+            </div>
+          );
+        })}
       </div>
       {showQR && qrContent && (
         <div className="qr-placeholder" style={{ alignSelf: 'flex-end', flexShrink: 0, marginTop: 'auto' }}>
