@@ -1,23 +1,14 @@
 import { useState } from 'react';
-import { parseCSV, autoMapFields, generateId } from '../utils';
+import { parseCSV, autoMapFields, generateId, getTemplateFields } from '../utils';
 
-const fieldLabels = {
-  specimenNo: '标本编号',
-  latinName: '拉丁名',
-  collector: '采集人',
-  collectionDate: '采集日期',
-  longitude: '经度',
-  latitude: '纬度',
-  altitude: '海拔',
-  habitat: '生境备注'
-};
-
-export default function CSVImport({ onImport, onClose }) {
+export default function CSVImport({ template, onImport, onClose }) {
   const [step, setStep] = useState(1);
   const [csvHeaders, setCsvHeaders] = useState([]);
   const [csvData, setCsvData] = useState([]);
   const [fieldMap, setFieldMap] = useState({});
   const [previewData, setPreviewData] = useState([]);
+
+  const templateFields = template ? getTemplateFields(template) : [];
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -27,7 +18,7 @@ export default function CSVImport({ onImport, onClose }) {
       const { headers, data } = await parseCSV(file);
       setCsvHeaders(headers);
       setCsvData(data);
-      setFieldMap(autoMapFields(headers));
+      setFieldMap(autoMapFields(headers, template));
       setStep(2);
     } catch (error) {
       alert('CSV解析失败: ' + error.message);
@@ -43,7 +34,7 @@ export default function CSVImport({ onImport, onClose }) {
 
   const generatePreview = () => {
     const preview = csvData.slice(0, 5).map(row => {
-      const specimen = { id: generateId() };
+      const specimen = { id: generateId(), templateId: template?.id };
       Object.entries(fieldMap).forEach(([csvHeader, targetField]) => {
         if (targetField) {
           specimen[targetField] = row[csvHeader] || '';
@@ -57,7 +48,7 @@ export default function CSVImport({ onImport, onClose }) {
 
   const handleImport = () => {
     const data = csvData.map(row => {
-      const specimen = { id: generateId() };
+      const specimen = { id: generateId(), templateId: template?.id };
       Object.entries(fieldMap).forEach(([csvHeader, targetField]) => {
         if (targetField) {
           specimen[targetField] = row[csvHeader] || '';
@@ -74,6 +65,12 @@ export default function CSVImport({ onImport, onClose }) {
         <h3>批量导入CSV</h3>
         <button onClick={onClose} className="close-btn">&times;</button>
       </div>
+
+      {template && (
+        <div className="import-template-info">
+          当前模板: <strong>{template.name}</strong>
+        </div>
+      )}
 
       {step === 1 && (
         <div className="import-step">
@@ -100,8 +97,8 @@ export default function CSVImport({ onImport, onClose }) {
                   onChange={(e) => handleFieldMapChange(header, e.target.value)}
                 >
                   <option value="">-- 不导入 --</option>
-                  {Object.entries(fieldLabels).map(([field, label]) => (
-                    <option key={field} value={field}>{label}</option>
+                  {templateFields.map(field => (
+                    <option key={field.key} value={field.key}>{field.label}</option>
                   ))}
                 </select>
               </div>
@@ -120,9 +117,9 @@ export default function CSVImport({ onImport, onClose }) {
             {previewData.map((specimen, index) => (
               <div key={index} className="preview-row">
                 <strong>#{index + 1}</strong>
-                <span>{specimen.specimenNo || '-'}</span>
-                <span>{specimen.latinName || '-'}</span>
-                <span>{specimen.collector || '-'}</span>
+                {templateFields.slice(0, 3).map(field => (
+                  <span key={field.key}>{specimen[field.key] || '-'}</span>
+                ))}
               </div>
             ))}
           </div>

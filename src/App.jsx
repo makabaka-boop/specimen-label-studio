@@ -4,51 +4,95 @@ import SpecimenList from './components/SpecimenList';
 import CSVImport from './components/CSVImport';
 import SettingsPanel from './components/SettingsPanel';
 import LabelGrid from './components/LabelGrid';
+import TemplateManager from './components/TemplateManager';
 import {
-  defaultSpecimen,
-  defaultSettings,
-  generateId,
   saveToLocalStorage,
   loadFromLocalStorage,
   exportToJSON,
-  downloadFile
+  downloadFile,
+  loadTemplatesFromLocalStorage,
+  saveTemplatesToLocalStorage,
+  getTemplateById,
+  getDefaultTemplate,
+  createEmptySpecimen,
+  handleTemplateDeletion,
+  migrateSpecimenToTemplate
 } from './utils';
 import html2canvas from 'html2canvas';
 import './App.css';
 
 function App() {
   const [specimens, setSpecimens] = useState([]);
-  const [settings, setSettings] = useState(defaultSettings);
+  const [templates, setTemplates] = useState(() => loadTemplatesFromLocalStorage());
+  const [activeTemplateId, setActiveTemplateId] = useState(() => getDefaultTemplate().id);
   const [activeTab, setActiveTab] = useState('data');
   const [showForm, setShowForm] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
+  const [showTemplateManager, setShowTemplateManager] = useState(false);
   const [editingSpecimen, setEditingSpecimen] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
+
+  const activeTemplate = getTemplateById(templates, activeTemplateId);
+  const settings = activeTemplate?.layoutSettings || {};
 
   useEffect(() => {
     const draft = loadFromLocalStorage();
     if (draft) {
       setSpecimens(draft.data || []);
-      setSettings(draft.settings || defaultSettings);
+      if (draft.templates?.length) {
+        setTemplates(draft.templates);
+      }
+      if (draft.activeTemplateId) {
+        setActiveTemplateId(draft.activeTemplateId);
+      }
       setLastSaved(draft.savedAt);
     }
   }, []);
 
   useEffect(() => {
+    saveTemplatesToLocalStorage(templates);
+  }, [templates]);
+
+  useEffect(() => {
+    if (templates.length === 0 || !activeTemplateId) return;
+    
     const timer = setTimeout(() => {
-      saveToLocalStorage(specimens, settings);
+      saveToLocalStorage(specimens, settings, templates, activeTemplateId);
       setLastSaved(new Date().toISOString());
     }, 1000);
     return () => clearTimeout(timer);
-  }, [specimens, settings]);
+  }, [specimens, settings, templates, activeTemplateId]);
+
+  const handleTemplatesChange = (newTemplates) => {
+    const oldDefault = templates.find(t => t.isDefault);
+    const newDefault = newTemplates.find(t => t.isDefault);
+    
+    if (oldDefault && newDefault && oldDefault.id !== newDefault.id) {
+      const migratedSpecimens = handleTemplateDeletion(
+        specimens, 
+        oldDefault.id, 
+        newDefault.id
+      );
+      setSpecimens(migratedSpecimens);
+    }
+    
+    setTemplates(newTemplates);
+  };
+
+  const handleActiveTemplateChange = (templateId) => {
+    setActiveTemplateId(templateId);
+  };
 
   const handleAddSpecimen = () => {
-    setEditingSpecimen({ ...defaultSpecimen, id: generateId() });
+    const newSpecimen = createEmptySpecimen(activeTemplateId);
+    setEditingSpecimen(newSpecimen);
     setShowForm(true);
   };
 
   const handleEditSpecimen = (specimen) => {
-    setEditingSpecimen(specimen);
+    const template = getTemplateById(templates, specimen.templateId || activeTemplateId);
+    const migratedSpecimen = migrateSpecimenToTemplate(specimen, template);
+    setEditingSpecimen(migratedSpecimen);
     setShowForm(true);
   };
 
@@ -69,7 +113,11 @@ function App() {
   };
 
   const handleCSVImport = (data) => {
-    setSpecimens(prev => [...prev, ...data]);
+    const dataWithTemplate = data.map(item => ({
+      ...item,
+      templateId: activeTemplateId
+    }));
+    setSpecimens(prev => [...prev, ...dataWithTemplate]);
     setShowCSVImport(false);
   };
 
@@ -91,9 +139,15 @@ function App() {
   };
 
   const handleExportPDF = () => {
+    const templateInfo = activeTemplate ? `
+当前模板: ${activeTemplate.name}
+模板字段: ${activeTemplate.fields.length} 个
+` : '';
+
     const info = `
 标本标签PDF导出说明
 
+${templateInfo}
 当前设置:
 - 标签尺寸: ${settings.labelWidth} x ${settings.labelHeight} mm
 - 边距: ${settings.margin} mm
@@ -129,8 +183,21 @@ function App() {
   return (
     <div className="app">
       <header className="app-header">
-        <h1>标本标签排版工具</h1>
+        <div className="header-title">
+          <h1>标本标签排版工具</h1>
+          {activeTemplate && (
+            <span className="current-template">
+              当前模板: {activeTemplate.name}
+            </span>
+          )}
+        </div>
         <div className="header-actions">
+          <button 
+            onClick={() => setShowTemplateManager(true)} 
+            className="btn btn-secondary"
+          >
+            模板管理
+          </button>
           {lastSaved && (
             <span className="save-status">
               已保存: {new Date(lastSaved).toLocaleTimeString()}
@@ -173,18 +240,35 @@ function App() {
         {activeTab === 'data' && (
           <div className="tab-content">
             <div className="action-bar">
-              <button onClick={handleAddSpecimen} className="btn btn-primary">
-                + 添加标本
-              </button>
-              <button onClick={() => setShowCSVImport(true)} className="btn btn-secondary">
-                导入CSV
-              </button>
-              <button onClick={handleClearAll} className="btn btn-danger">
-                清空全部
-              </button>
+              <div className="action-left">
+                <button onClick={handleAddSpecimen} className="btn btn-primary">
+                  + 添加标本
+                </button>
+                <button onClick={() => setShowCSVImport(true)} className="btn btn-secondary">
+                  导入CSV
+                </button>
+                <button onClick={handleClearAll} className="btn btn-danger">
+                  清空全部
+                </button>
+              </div>
+              <div className="action-right">
+                <label className="template-select-label">当前模板:</label>
+                <select
+                  value={activeTemplateId || ''}
+                  onChange={(e) => handleActiveTemplateChange(e.target.value)}
+                  className="template-select"
+                >
+                  {templates.map(template => (
+                    <option key={template.id} value={template.id}>
+                      {template.name} {template.isDefault ? '(默认)' : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
             <SpecimenList
               specimens={specimens}
+              templates={templates}
               onEdit={handleEditSpecimen}
               onDelete={handleDeleteSpecimen}
             />
@@ -193,13 +277,26 @@ function App() {
 
         {activeTab === 'preview' && (
           <div className="tab-content">
-            <LabelGrid specimens={specimens} settings={settings} />
+            <LabelGrid 
+              specimens={specimens} 
+              settings={settings}
+              templates={templates}
+            />
           </div>
         )}
 
         {activeTab === 'settings' && (
           <div className="tab-content">
-            <SettingsPanel settings={settings} onSettingsChange={setSettings} />
+            <SettingsPanel 
+              settings={settings} 
+              onSettingsChange={(newSettings) => {
+                setTemplates(prev => prev.map(t => 
+                  t.id === activeTemplateId 
+                    ? { ...t, layoutSettings: newSettings }
+                    : t
+                ));
+              }}
+            />
           </div>
         )}
 
@@ -210,8 +307,11 @@ function App() {
               <div className="export-grid">
                 <div className="export-card">
                   <h4>导出 JSON</h4>
-                  <p>保存所有数据和设置为JSON格式，便于后续导入编辑</p>
-                  <button onClick={() => exportToJSON(specimens, settings)} className="btn btn-primary">
+                  <p>保存所有数据、设置和模板为JSON格式，便于后续导入编辑</p>
+                  <button 
+                    onClick={() => exportToJSON(specimens, settings, templates, activeTemplateId)} 
+                    className="btn btn-primary"
+                  >
                     导出 JSON
                   </button>
                 </div>
@@ -238,7 +338,7 @@ function App() {
         )}
       </main>
 
-      {showForm && (
+      {showForm && activeTemplate && (
         <div className="modal-overlay">
           <div className="modal">
             <div className="modal-header">
@@ -248,7 +348,9 @@ function App() {
               </button>
             </div>
             <SpecimenForm
+              key={editingSpecimen?.id}
               specimen={editingSpecimen}
+              template={getTemplateById(templates, editingSpecimen?.templateId || activeTemplateId)}
               onSave={handleSaveSpecimen}
               onCancel={() => setShowForm(false)}
             />
@@ -256,12 +358,27 @@ function App() {
         </div>
       )}
 
-      {showCSVImport && (
+      {showCSVImport && activeTemplate && (
         <div className="modal-overlay">
           <div className="modal">
             <CSVImport
+              template={activeTemplate}
               onImport={handleCSVImport}
               onClose={() => setShowCSVImport(false)}
+            />
+          </div>
+        </div>
+      )}
+
+      {showTemplateManager && (
+        <div className="modal-overlay">
+          <div className="modal modal-large">
+            <TemplateManager
+              templates={templates}
+              activeTemplateId={activeTemplateId}
+              onTemplatesChange={handleTemplatesChange}
+              onActiveTemplateChange={handleActiveTemplateChange}
+              onClose={() => setShowTemplateManager(false)}
             />
           </div>
         </div>
