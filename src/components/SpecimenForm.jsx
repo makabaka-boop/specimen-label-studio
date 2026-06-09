@@ -1,18 +1,10 @@
 import { useState } from 'react';
+import { getTemplateFields } from '../utils';
 
-const fieldLabels = {
-  specimenNo: '标本编号',
-  latinName: '拉丁名',
-  collector: '采集人',
-  collectionDate: '采集日期',
-  longitude: '经度',
-  latitude: '纬度',
-  altitude: '海拔',
-  habitat: '生境备注'
-};
-
-export default function SpecimenForm({ specimen, onSave, onCancel }) {
+export default function SpecimenForm({ specimen, template, onSave, onCancel }) {
   const [formData, setFormData] = useState(specimen);
+  
+  const fields = template ? getTemplateFields(template) : [];
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -21,29 +13,32 @@ export default function SpecimenForm({ specimen, onSave, onCancel }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    onSave({
+      ...formData,
+      templateId: template.id
+    });
   };
 
   return (
     <form onSubmit={handleSubmit} className="specimen-form">
       <div className="form-grid">
-        {Object.entries(fieldLabels).map(([field, label]) => (
-          <div key={field} className="form-group">
-            <label htmlFor={field}>{label}</label>
-            {field === 'habitat' ? (
+        {fields.map(field => (
+          <div key={field.key} className="form-group">
+            <label htmlFor={field.key}>{field.label}</label>
+            {field.type === 'textarea' ? (
               <textarea
-                id={field}
-                name={field}
-                value={formData[field] || ''}
+                id={field.key}
+                name={field.key}
+                value={formData[field.key] || ''}
                 onChange={handleChange}
                 rows={3}
               />
             ) : (
               <input
-                type={field === 'collectionDate' ? 'date' : 'text'}
-                id={field}
-                name={field}
-                value={formData[field] || ''}
+                type={field.type === 'date' ? 'date' : 'text'}
+                id={field.key}
+                name={field.key}
+                value={formData[field.key] || ''}
                 onChange={handleChange}
               />
             )}
