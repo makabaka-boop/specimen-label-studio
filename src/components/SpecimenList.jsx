@@ -1,4 +1,11 @@
-export default function SpecimenList({ specimens, onEdit, onDelete }) {
+import { getActiveTemplate } from '../utils';
+
+export default function SpecimenList({ specimens, templates, onEdit, onDelete }) {
+  const getTemplateName = (templateId) => {
+    const template = templates.find(t => t.id === templateId);
+    return template?.name || '未知模板';
+  };
+
   return (
     <div className="specimen-list">
       <div className="list-header">
@@ -13,8 +20,9 @@ export default function SpecimenList({ specimens, onEdit, onDelete }) {
             <div key={specimen.id} className="list-item">
               <div className="item-info">
                 <span className="item-index">#{index + 1}</span>
+                <span className="item-template-badge">{getTemplateName(specimen.templateId)}</span>
                 <span className="item-no">{specimen.specimenNo || '未编号'}</span>
-                <span className="item-name">{specimen.latinName || '-'}</span>
+                <span className="item-name">{specimen.latinName || specimen.chineseName || '-'}</span>
               </div>
               <div className="item-actions">
                 <button onClick={() => onEdit(specimen)} className="btn-icon">
