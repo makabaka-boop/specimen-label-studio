@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import SpecimenLabel from './SpecimenLabel';
 
-export default function LabelGrid({ specimens, settings }) {
+export default function LabelGrid({ specimens, settings, template }) {
   const [currentPage, setCurrentPage] = useState(0);
   const { columns, rows } = settings;
   const perPage = columns * rows;
@@ -46,6 +46,7 @@ export default function LabelGrid({ specimens, settings }) {
             key={specimen.id || index}
             specimen={specimen}
             settings={settings}
+            template={template}
           />
         ))}
         {currentSpecimens.length < perPage &&
