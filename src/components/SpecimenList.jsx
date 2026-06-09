@@ -1,4 +1,6 @@
-export default function SpecimenList({ specimens, onEdit, onDelete }) {
+import { getTemplateById } from '../utils';
+
+export default function SpecimenList({ specimens, templates, onEdit, onDelete }) {
   return (
     <div className="specimen-list">
       <div className="list-header">
@@ -9,23 +11,27 @@ export default function SpecimenList({ specimens, onEdit, onDelete }) {
         <p className="empty-state">暂无数据，请添加标本或导入CSV</p>
       ) : (
         <div className="list-content">
-          {specimens.map((specimen, index) => (
-            <div key={specimen.id} className="list-item">
-              <div className="item-info">
-                <span className="item-index">#{index + 1}</span>
-                <span className="item-no">{specimen.specimenNo || '未编号'}</span>
-                <span className="item-name">{specimen.latinName || '-'}</span>
+          {specimens.map((specimen, index) => {
+            const template = getTemplateById(templates, specimen.templateId);
+            return (
+              <div key={specimen.id} className="list-item">
+                <div className="item-info">
+                  <span className="item-index">#{index + 1}</span>
+                  <span className="item-no">{specimen.specimenNo || '未编号'}</span>
+                  <span className="item-name">{specimen.latinName || '-'}</span>
+                  <span className="item-template">{template?.name || '未知模板'}</span>
+                </div>
+                <div className="item-actions">
+                  <button onClick={() => onEdit(specimen)} className="btn-icon">
+                    编辑
+                  </button>
+                  <button onClick={() => onDelete(specimen.id)} className="btn-icon btn-danger">
+                    删除
+                  </button>
+                </div>
               </div>
-              <div className="item-actions">
-                <button onClick={() => onEdit(specimen)} className="btn-icon">
-                  编辑
-                </button>
-                <button onClick={() => onDelete(specimen.id)} className="btn-icon btn-danger">
-                  删除
-                </button>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,23 +1,18 @@
 import { useState } from 'react';
-import { parseCSV, autoMapFields, generateId } from '../utils';
+import { parseCSV, autoMapFields, generateId, getDefaultTemplateId } from '../utils';
 
-const fieldLabels = {
-  specimenNo: '标本编号',
-  latinName: '拉丁名',
-  collector: '采集人',
-  collectionDate: '采集日期',
-  longitude: '经度',
-  latitude: '纬度',
-  altitude: '海拔',
-  habitat: '生境备注'
-};
-
-export default function CSVImport({ onImport, onClose }) {
+export default function CSVImport({ templates, onImport, onClose }) {
   const [step, setStep] = useState(1);
+  const [selectedTemplateId, setSelectedTemplateId] = useState(getDefaultTemplateId());
   const [csvHeaders, setCsvHeaders] = useState([]);
   const [csvData, setCsvData] = useState([]);
   const [fieldMap, setFieldMap] = useState({});
   const [previewData, setPreviewData] = useState([]);
+
+  const currentTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
+  const visibleFields = currentTemplate
+    ? currentTemplate.fields.filter(f => f.visible)
+    : [];
 
   const handleFileUpload = async (e) => {
     const file = e.target.files[0];
@@ -27,10 +22,19 @@ export default function CSVImport({ onImport, onClose }) {
       const { headers, data } = await parseCSV(file);
       setCsvHeaders(headers);
       setCsvData(data);
-      setFieldMap(autoMapFields(headers));
+      setFieldMap(autoMapFields(headers, currentTemplate));
       setStep(2);
     } catch (error) {
       alert('CSV解析失败: ' + error.message);
+    }
+  };
+
+  const handleTemplateChange = (e) => {
+    const newId = e.target.value;
+    setSelectedTemplateId(newId);
+    const newTemplate = templates.find(t => t.id === newId) || templates[0];
+    if (csvHeaders.length > 0) {
+      setFieldMap(autoMapFields(csvHeaders, newTemplate));
     }
   };
 
@@ -43,7 +47,7 @@ export default function CSVImport({ onImport, onClose }) {
 
   const generatePreview = () => {
     const preview = csvData.slice(0, 5).map(row => {
-      const specimen = { id: generateId() };
+      const specimen = { id: generateId(), templateId: selectedTemplateId };
       Object.entries(fieldMap).forEach(([csvHeader, targetField]) => {
         if (targetField) {
           specimen[targetField] = row[csvHeader] || '';
@@ -57,7 +61,7 @@ export default function CSVImport({ onImport, onClose }) {
 
   const handleImport = () => {
     const data = csvData.map(row => {
-      const specimen = { id: generateId() };
+      const specimen = { id: generateId(), templateId: selectedTemplateId };
       Object.entries(fieldMap).forEach(([csvHeader, targetField]) => {
         if (targetField) {
           specimen[targetField] = row[csvHeader] || '';
@@ -73,6 +77,18 @@ export default function CSVImport({ onImport, onClose }) {
       <div className="modal-header">
         <h3>批量导入CSV</h3>
         <button onClick={onClose} className="close-btn">&times;</button>
+      </div>
+
+      <div className="form-group template-select-group">
+        <label>导入到模板</label>
+        <select
+          value={selectedTemplateId}
+          onChange={handleTemplateChange}
+        >
+          {templates.map(t => (
+            <option key={t.id} value={t.id}>{t.name}</option>
+          ))}
+        </select>
       </div>
 
       {step === 1 && (
@@ -100,8 +116,8 @@ export default function CSVImport({ onImport, onClose }) {
                   onChange={(e) => handleFieldMapChange(header, e.target.value)}
                 >
                   <option value="">-- 不导入 --</option>
-                  {Object.entries(fieldLabels).map(([field, label]) => (
-                    <option key={field} value={field}>{label}</option>
+                  {visibleFields.map(field => (
+                    <option key={field.key} value={field.key}>{field.label}</option>
                   ))}
                 </select>
               </div>
@@ -120,13 +136,13 @@ export default function CSVImport({ onImport, onClose }) {
             {previewData.map((specimen, index) => (
               <div key={index} className="preview-row">
                 <strong>#{index + 1}</strong>
-                <span>{specimen.specimenNo || '-'}</span>
-                <span>{specimen.latinName || '-'}</span>
-                <span>{specimen.collector || '-'}</span>
+                {visibleFields.slice(0, 4).map(field => (
+                  <span key={field.key}>{specimen[field.key] || '-'}</span>
+                ))}
               </div>
             ))}
           </div>
-          <p>共 {csvData.length} 条数据</p>
+          <p>共 {csvData.length} 条数据，导入到「{currentTemplate?.name}」模板</p>
           <div className="import-actions">
             <button onClick={() => setStep(2)} className="btn btn-secondary">
               返回修改

@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 const settingLabels = {
   labelWidth: '标签宽度 (mm)',
   labelHeight: '标签高度 (mm)',
@@ -9,17 +11,48 @@ const settingLabels = {
   qrSize: '二维码大小 (mm)'
 };
 
-export default function SettingsPanel({ settings, onSettingsChange }) {
+export default function SettingsPanel({ templates, onUpdateTemplates }) {
+  const [selectedTemplateId, setSelectedTemplateId] = useState(
+    templates.find(t => t.isDefault)?.id || templates[0]?.id || ''
+  );
+
+  const currentTemplate = templates.find(t => t.id === selectedTemplateId) || templates[0];
+
+  if (!currentTemplate) return null;
+
+  const settings = currentTemplate.settings;
+
+  const handleTemplateSelect = (e) => {
+    setSelectedTemplateId(e.target.value);
+  };
+
   const handleChange = (key, value) => {
-    onSettingsChange({
-      ...settings,
-      [key]: value
-    });
+    const updatedTemplate = {
+      ...currentTemplate,
+      settings: {
+        ...currentTemplate.settings,
+        [key]: value
+      }
+    };
+    onUpdateTemplates(templates.map(t =>
+      t.id === currentTemplate.id ? updatedTemplate : t
+    ));
   };
 
   return (
     <div className="settings-panel">
-      <h3>排版设置</h3>
+      <div className="settings-template-select">
+        <h3>排版设置</h3>
+        <div className="form-group">
+          <label>选择模板</label>
+          <select value={selectedTemplateId} onChange={handleTemplateSelect}>
+            {templates.map(t => (
+              <option key={t.id} value={t.id}>{t.name}</option>
+            ))}
+          </select>
+        </div>
+      </div>
+
       <div className="settings-grid">
         {Object.entries(settingLabels).map(([key, label]) => (
           <div key={key} className="setting-item">

@@ -4,14 +4,19 @@ import SpecimenList from './components/SpecimenList';
 import CSVImport from './components/CSVImport';
 import SettingsPanel from './components/SettingsPanel';
 import LabelGrid from './components/LabelGrid';
+import TemplateManager from './components/TemplateManager';
 import {
   defaultSpecimen,
   defaultSettings,
+  defaultTemplates,
   generateId,
   saveToLocalStorage,
   loadFromLocalStorage,
   exportToJSON,
-  downloadFile
+  downloadFile,
+  getTemplateById,
+  getDefaultTemplateId,
+  migrateSpecimens
 } from './utils';
 import html2canvas from 'html2canvas';
 import './App.css';
@@ -19,11 +24,13 @@ import './App.css';
 function App() {
   const [specimens, setSpecimens] = useState([]);
   const [settings, setSettings] = useState(defaultSettings);
+  const [templates, setTemplates] = useState(defaultTemplates);
   const [activeTab, setActiveTab] = useState('data');
   const [showForm, setShowForm] = useState(false);
   const [showCSVImport, setShowCSVImport] = useState(false);
   const [editingSpecimen, setEditingSpecimen] = useState(null);
   const [lastSaved, setLastSaved] = useState(null);
+  const [previewTemplateId, setPreviewTemplateId] = useState('');
 
   useEffect(() => {
     const draft = loadFromLocalStorage();
@@ -32,18 +39,35 @@ function App() {
       setSettings(draft.settings || defaultSettings);
       setLastSaved(draft.savedAt);
     }
+    if (draft && draft.templates && draft.templates.length > 0) {
+      setTemplates(draft.templates);
+    }
   }, []);
 
   useEffect(() => {
+    const migrated = migrateSpecimens(specimens, templates);
+    const needsMigration = migrated.some((s, i) => s.templateId !== specimens[i]?.templateId);
+    if (needsMigration) {
+      setSpecimens(migrated);
+    }
+  }, [templates]);
+
+  useEffect(() => {
+    if (!previewTemplateId && templates.length > 0) {
+      setPreviewTemplateId(getDefaultTemplateId());
+    }
+  }, [templates]);
+
+  useEffect(() => {
     const timer = setTimeout(() => {
-      saveToLocalStorage(specimens, settings);
+      saveToLocalStorage(specimens, settings, templates);
       setLastSaved(new Date().toISOString());
     }, 1000);
     return () => clearTimeout(timer);
-  }, [specimens, settings]);
+  }, [specimens, settings, templates]);
 
   const handleAddSpecimen = () => {
-    setEditingSpecimen({ ...defaultSpecimen, id: generateId() });
+    setEditingSpecimen({ ...defaultSpecimen, id: generateId(), templateId: getDefaultTemplateId() });
     setShowForm(true);
   };
 
@@ -73,6 +97,30 @@ function App() {
     setShowCSVImport(false);
   };
 
+  const handleUpdateTemplates = (newTemplates) => {
+    setTemplates(newTemplates);
+  };
+
+  const handleDeleteTemplate = (templateId) => {
+    const defaultId = getDefaultTemplateId();
+    if (templateId === defaultId) {
+      alert('不能删除默认模板');
+      return;
+    }
+    const affectedCount = specimens.filter(s => s.templateId === templateId).length;
+    if (affectedCount > 0) {
+      const confirmed = confirm(
+        `该模板下有 ${affectedCount} 条标本数据，删除模板后这些标本将自动归入默认模板。确定要删除吗？`
+      );
+      if (!confirmed) return;
+    }
+    const newTemplates = templates.filter(t => t.id !== templateId);
+    setTemplates(newTemplates);
+    if (previewTemplateId === templateId) {
+      setPreviewTemplateId(defaultId);
+    }
+  };
+
   const handleExportPNG = async () => {
     const grid = document.getElementById('printable-grid');
     if (!grid) return;
@@ -91,9 +139,12 @@ function App() {
   };
 
   const handleExportPDF = () => {
+    const currentTemplate = getTemplateById(templates, previewTemplateId);
+    const filteredSpecimens = specimens.filter(s => s.templateId === previewTemplateId);
     const info = `
 标本标签PDF导出说明
 
+当前模板: ${currentTemplate?.name || '默认'}
 当前设置:
 - 标签尺寸: ${settings.labelWidth} x ${settings.labelHeight} mm
 - 边距: ${settings.margin} mm
@@ -102,8 +153,8 @@ function App() {
 - 显示二维码: ${settings.showQR ? '是' : '否'}
 
 数据统计:
-- 标本数量: ${specimens.length}
-- 总页数: ${Math.ceil(specimens.length / (settings.columns * settings.rows))}
+- 标本数量: ${filteredSpecimens.length}
+- 总页数: ${Math.ceil(filteredSpecimens.length / (settings.columns * settings.rows))}
 
 打印说明:
 1. 使用浏览器打印功能 (Ctrl+P / Cmd+P)
@@ -125,6 +176,12 @@ function App() {
   const handlePrint = () => {
     window.print();
   };
+
+  const filteredSpecimens = previewTemplateId
+    ? specimens.filter(s => s.templateId === previewTemplateId)
+    : specimens;
+
+  const currentPreviewTemplate = getTemplateById(templates, previewTemplateId);
 
   return (
     <div className="app">
@@ -162,6 +219,12 @@ function App() {
           排版设置
         </button>
         <button
+          className={`tab ${activeTab === 'templates' ? 'active' : ''}`}
+          onClick={() => setActiveTab('templates')}
+        >
+          模板管理
+        </button>
+        <button
           className={`tab ${activeTab === 'export' ? 'active' : ''}`}
           onClick={() => setActiveTab('export')}
         >
@@ -185,6 +248,7 @@ function App() {
             </div>
             <SpecimenList
               specimens={specimens}
+              templates={templates}
               onEdit={handleEditSpecimen}
               onDelete={handleDeleteSpecimen}
             />
@@ -193,13 +257,44 @@ function App() {
 
         {activeTab === 'preview' && (
           <div className="tab-content">
-            <LabelGrid specimens={specimens} settings={settings} />
+            <div className="preview-template-selector">
+              <label>按模板筛选：</label>
+              <select
+                value={previewTemplateId}
+                onChange={(e) => setPreviewTemplateId(e.target.value)}
+              >
+                {templates.map(t => (
+                  <option key={t.id} value={t.id}>{t.name}</option>
+                ))}
+              </select>
+              <span className="filter-count">
+                共 {filteredSpecimens.length} 条标本
+              </span>
+            </div>
+            <LabelGrid
+              specimens={filteredSpecimens}
+              settings={currentPreviewTemplate?.settings || settings}
+              template={currentPreviewTemplate}
+            />
           </div>
         )}
 
         {activeTab === 'settings' && (
           <div className="tab-content">
-            <SettingsPanel settings={settings} onSettingsChange={setSettings} />
+            <SettingsPanel
+              templates={templates}
+              onUpdateTemplates={handleUpdateTemplates}
+            />
+          </div>
+        )}
+
+        {activeTab === 'templates' && (
+          <div className="tab-content">
+            <TemplateManager
+              templates={templates}
+              onUpdateTemplates={handleUpdateTemplates}
+              onDeleteTemplate={handleDeleteTemplate}
+            />
           </div>
         )}
 
@@ -210,8 +305,8 @@ function App() {
               <div className="export-grid">
                 <div className="export-card">
                   <h4>导出 JSON</h4>
-                  <p>保存所有数据和设置为JSON格式，便于后续导入编辑</p>
-                  <button onClick={() => exportToJSON(specimens, settings)} className="btn btn-primary">
+                  <p>保存所有数据、设置和模板为JSON格式，便于后续导入编辑</p>
+                  <button onClick={() => exportToJSON(specimens, settings, templates)} className="btn btn-primary">
                     导出 JSON
                   </button>
                 </div>
@@ -249,6 +344,7 @@ function App() {
             </div>
             <SpecimenForm
               specimen={editingSpecimen}
+              templates={templates}
               onSave={handleSaveSpecimen}
               onCancel={() => setShowForm(false)}
             />
@@ -260,6 +356,7 @@ function App() {
         <div className="modal-overlay">
           <div className="modal">
             <CSVImport
+              templates={templates}
               onImport={handleCSVImport}
               onClose={() => setShowCSVImport(false)}
             />
